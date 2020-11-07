@@ -1,6 +1,8 @@
 import pytest
 import brownie
-
+from web3 import Web3
+from eth_account import Account
+from eth_account.messages import encode_structured_data
 
 @pytest.fixture
 def vault(gov, token, Vault):
@@ -214,3 +216,52 @@ def test_transferFrom(accounts, token, vault, fn_isolation):
 
     assert vault.balanceOf(a) == 0
     assert vault.balanceOf(b) == token.balanceOf(vault)
+
+def test_permit(vault, token, accounts, chain):
+    # Account A will be doing the permit(), so we'll need to generate a signature
+    a = accounts.add() # Generates a LocalAccount with an attached privateKey
+    b = accounts[1]
+
+    signingAccount = Account.from_key(a.private_key)
+
+    assert vault.nonces(a) == 0
+    assert vault.allowance(a, b) == 0
+
+    permitMessage = encode_structured_data({
+        "types": {
+            "EIP712Domain": [
+                {"name": "name", "type": "string"},
+                {"name": "version", "type": "string"},
+                {"name": "chainId", "type": "uint256"},
+                {"name": "verifyingContract", "type": "address"},
+            ],
+            "Permit": [
+                {"name":"holder", "type":"address"},
+                {"name":"spender", "type":"address"},
+                {"name":"nonce", "type":"uint256"},
+                {"name":"expiry", "type":"uint256"},
+                {"name":"allowed", "type":"bool"},
+            ]
+        },
+        "primaryType": "Permit",
+        "domain": {
+            "name": vault.name(),
+            "version": vault.apiVersion(),
+            "chainId": chain.id,
+            "verifyingContract": vault.address,
+        },
+        "message": {
+            "holder": a.address,
+            "spender": b.address,
+            "nonce": 0,
+            "expiry": 0,
+            "allowed": True
+        }
+    })
+
+    signedMessage = signingAccount.sign_message(permitMessage)
+
+    vault.permit(a, b, 1, 0, True, signedMessage.v, signedMessage.r, signedMessage.s)
+
+    assert vault.allowance(a, b) == 2^256-1 # MAX_UINT256 in Vyper
+    assert vault.nonce(a) == 1

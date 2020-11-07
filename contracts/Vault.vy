@@ -244,7 +244,7 @@ def transferFrom(_from: address, _to: address, _value: uint256) -> bool:
 
 
 @external
-def permit(_holder: address, _spender: address, _nonce: uint256, _expiry: uint256, _allowed: bool, _v: uint256, _r: uint256, _s: uint256):
+def permit(_holder: address, _spender: address, _nonce: uint256, _expiry: uint256, _allowed: bool, _v: uint256, _r: bytes32, _s: bytes32):
     assert _holder != ZERO_ADDRESS
     assert (_expiry == 0 or block.timestamp <= _expiry)
 
@@ -261,7 +261,7 @@ def permit(_holder: address, _spender: address, _nonce: uint256, _expiry: uint25
                          convert(_expiry, bytes32),
                          convert(_allowed, bytes32)))))
     
-    assert _holder == ecrecover(digest, _v, _r, _s)
+    assert _holder == ecrecover(digest, _v, convert(_r, uint256), convert(_s, uint256))
 
     self.nonces[_holder] = expectedNonce
 
